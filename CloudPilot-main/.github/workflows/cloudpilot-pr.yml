@@ -1,0 +1,207 @@
+name: CloudPilot PR analysis
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      demo_mode:
+        description: Use the bundled fixture when no Terraform directory is configured
+        required: false
+        type: boolean
+        default: false
+      run_v3_verification:
+        description: Verify a completed deployment using a result from an earlier analysis run
+        required: false
+        type: boolean
+        default: false
+      analysis_run_id:
+        description: Workflow run ID that uploaded cloudpilot-result
+        required: false
+        type: string
+        default: ''
+      deployment_id:
+        description: ID of the completed deployment
+        required: false
+        type: string
+        default: ''
+      actual_monthly_cost_delta:
+        description: Actual monthly cost delta observed after deployment
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze:
+    if: ${{ github.event_name == 'pull_request' || inputs.run_v3_verification != true }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDPILOT_API_URL: ${{ secrets.CLOUDPILOT_API_URL }}
+      CLOUDPILOT_TF_DIRECTORY: ${{ vars.CLOUDPILOT_TF_DIRECTORY }}
+      CLOUDPILOT_ENVIRONMENT: ${{ vars.CLOUDPILOT_ENVIRONMENT }}
+      CLOUDPILOT_TEAM: ${{ vars.CLOUDPILOT_TEAM }}
+      CLOUDPILOT_REMAINING_BUDGET: ${{ vars.CLOUDPILOT_REMAINING_BUDGET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        if: ${{ vars.CLOUDPILOT_TF_DIRECTORY != '' }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Prepare Terraform plan
+        id: plan
+        env:
+          DEMO_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.demo_mode || false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan_path="$RUNNER_TEMP/cloudpilot-plan.json"
+
+          if [[ -n "${CLOUDPILOT_TF_DIRECTORY:-}" ]]; then
+            if [[ ! -d "$CLOUDPILOT_TF_DIRECTORY" ]]; then
+              echo "::error::CLOUDPILOT_TF_DIRECTORY does not exist: $CLOUDPILOT_TF_DIRECTORY"
+              exit 1
+            fi
+            if ! terraform -chdir="$CLOUDPILOT_TF_DIRECTORY" init -input=false -no-color; then
+              echo "::error::Terraform initialization failed; no fixture fallback will be used."
+              exit 1
+            fi
+            if ! terraform -chdir="$CLOUDPILOT_TF_DIRECTORY" plan -input=false -no-color -out="$RUNNER_TEMP/cloudpilot.tfplan"; then
+              echo "::error::Terraform plan failed; no fixture fallback will be used."
+              exit 1
+            fi
+            if ! terraform -chdir="$CLOUDPILOT_TF_DIRECTORY" show -json "$RUNNER_TEMP/cloudpilot.tfplan" > "$plan_path"; then
+              echo "::error::Terraform could not export the generated plan as JSON."
+              exit 1
+            fi
+          elif [[ "$DEMO_MODE" == "true" ]]; then
+            fixture_path="$GITHUB_WORKSPACE/terraform/test-plans/rds-scale-up.json"
+            if [[ ! -s "$fixture_path" ]]; then
+              echo "::error::Demo Terraform plan fixture is missing: $fixture_path"
+              exit 1
+            fi
+            cp "$fixture_path" "$plan_path"
+          else
+            echo "::error::Set CLOUDPILOT_TF_DIRECTORY for PR analysis, or explicitly enable demo_mode on workflow_dispatch."
+            exit 1
+          fi
+
+          if [[ ! -s "$plan_path" ]] || ! python3 -m json.tool "$plan_path" > /dev/null; then
+            echo "::error::Terraform plan JSON is missing or invalid."
+            exit 1
+          fi
+          echo "path=$plan_path" >> "$GITHUB_OUTPUT"
+
+      - name: Submit plan for analysis
+        id: analysis
+        env:
+          PLAN_PATH: ${{ steps.plan.outputs.path }}
+          PULL_REQUEST: ${{ github.event.pull_request.number || 'demo' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDPILOT_API_URL:-}" ]]; then
+            echo "::error::Configure the CLOUDPILOT_API_URL repository secret."
+            exit 1
+          fi
+
+          args=(
+            --api-url "$CLOUDPILOT_API_URL"
+            --plan "$PLAN_PATH"
+            --project "$GITHUB_REPOSITORY"
+            --pull-request "$PULL_REQUEST"
+            --environment "${CLOUDPILOT_ENVIRONMENT:-staging}"
+            --team "${CLOUDPILOT_TEAM:-unassigned}"
+            --output "$RUNNER_TEMP/cloudpilot-result.json"
+          )
+          if [[ -n "${CLOUDPILOT_REMAINING_BUDGET:-}" ]]; then
+            args+=(--remaining-budget "$CLOUDPILOT_REMAINING_BUDGET")
+          fi
+          python3 scripts/github_pr_feedback.py "${args[@]}"
+          decision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["decision"])' "$RUNNER_TEMP/cloudpilot-result.json")"
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on pull request
+        if: ${{ github.event_name == 'pull_request' && steps.analysis.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          RESULT_PATH: ${{ runner.temp }}/cloudpilot-result.json
+          DECISION: ${{ steps.analysis.outputs.decision }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          explanation="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["explanation"])' "$RESULT_PATH")"
+          gh pr comment "$PULL_REQUEST" --body "CloudPilot decision: **$DECISION**
+
+          $explanation"
+
+      - name: Retain analysis result
+        if: ${{ always() && steps.analysis.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudpilot-result
+          path: ${{ runner.temp }}/cloudpilot-result.json
+          if-no-files-found: error
+
+      - name: Fail blocked changes
+        if: ${{ steps.analysis.outputs.decision == 'BLOCK' }}
+        run: exit 1
+
+  verify_deployment:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_v3_verification == true }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDPILOT_API_URL: ${{ secrets.CLOUDPILOT_API_URL }}
+      ANALYSIS_RUN_ID: ${{ inputs.analysis_run_id }}
+      DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      ACTUAL_MONTHLY_COST_DELTA: ${{ inputs.actual_monthly_cost_delta }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate verification inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANALYSIS_RUN_ID" || -z "$DEPLOYMENT_ID" || -z "$ACTUAL_MONTHLY_COST_DELTA" ]]; then
+            echo "::error::Provide analysis_run_id, deployment_id, and actual_monthly_cost_delta for V3 verification."
+            exit 1
+          fi
+          if [[ ! "$ANALYSIS_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::analysis_run_id must be a numeric GitHub Actions run ID."
+            exit 1
+          fi
+          if [[ -z "${CLOUDPILOT_API_URL:-}" ]]; then
+            echo "::error::Configure the CLOUDPILOT_API_URL repository secret."
+            exit 1
+          fi
+
+      - name: Download analysis result
+        uses: actions/download-artifact@v4
+        with:
+          name: cloudpilot-result
+          run-id: ${{ inputs.analysis_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/analysis-result
+
+      - name: Record V3 deployment verification
+        env:
+          ANALYSIS_RESULT: ${{ runner.temp }}/analysis-result/cloudpilot-result.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -s "$ANALYSIS_RESULT" ]]; then
+            echo "::error::The selected analysis run has no cloudpilot-result artifact."
+            exit 1
+          fi
+          python3 scripts/verify_deployment.py \
+            --api-url "$CLOUDPILOT_API_URL" \
+            --analysis-result "$ANALYSIS_RESULT" \
+            --deployment-identifier "$DEPLOYMENT_ID" \
+            --actual-monthly-cost-delta "$ACTUAL_MONTHLY_COST_DELTA"

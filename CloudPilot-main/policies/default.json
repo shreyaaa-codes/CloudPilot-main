@@ -1,0 +1,3 @@
+{
+  "cost_limits": {"warn_above": 100, "block_above": 250}
+}

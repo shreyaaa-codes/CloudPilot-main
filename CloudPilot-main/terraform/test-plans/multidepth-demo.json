@@ -1,0 +1,36 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.3",
+  "resource_changes": [
+    {
+      "address": "aws_db_instance.checkout",
+      "mode": "managed",
+      "type": "aws_db_instance",
+      "name": "checkout",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "instance_class": "db.t3.medium",
+          "publicly_accessible": false,
+          "tags": {
+            "Environment": "production",
+            "Owner": "Payments"
+          }
+        },
+        "after": {
+          "instance_class": "db.r6g.2xlarge",
+          "publicly_accessible": false,
+          "tags": {
+            "Environment": "production",
+            "Owner": "Payments"
+          }
+        },
+        "before_sensitive": {},
+        "after_sensitive": {}
+      }
+    }
+  ]
+}

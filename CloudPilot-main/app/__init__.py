@@ -1,0 +1,1 @@
+"""CloudPilot application package."""

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CloudPilot</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="#summary" aria-label="CloudPilot home"><img src="/static/cloudpilot-logo.svg" alt="CloudPilot — Change Intelligence"></a>
+      <div class="runtime-status" aria-label="Application status"><i></i><span>Change review workspace</span></div>
+      <nav class="header-nav" aria-label="Primary navigation"><a href="#changes">Reviews</a><a href="#detail">Impact</a><a href="#verification">Verification</a></nav>
+      <button id="sample" class="header-action">Analyze sample plan <span aria-hidden="true">→</span></button>
+    </div>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="workspace-title">
+      <div><p class="eyebrow"><span class="live-pip"></span>AWS CHANGE INTELLIGENCE <span class="hero-divider">/</span> PRE-FLIGHT ANALYZER</p><h1 id="workspace-title">CloudPilot</h1><p class="subtitle">An explainable pre-deployment infrastructure change intelligence platform for AWS. Review cost, dependency impact, policy posture, and deployment outcomes before Terraform apply.</p></div>
+      <div class="hero-note"><span class="hero-note-dot"></span><span>Explainable decisions · Read-only AWS discovery</span></div>
+    </section>
+    <p id="error" class="error" hidden></p>
+
+    <section id="summary" aria-label="Analysis summary"><div id="cards"></div></section>
+
+    <section id="changes">
+      <div class="section-title"><div><p class="eyebrow">RECENT REVIEWS</p><h2>Infrastructure changes</h2></div></div>
+      <div id="changes-list" class="panel" aria-live="polite"></div>
+    </section>
+
+    <section id="detail">
+      <div class="section-title"><div><p class="eyebrow">CHANGE DETAIL</p><h2>Decision, cost, and impact</h2></div><span id="detail-status" class="muted">Select a review above.</span></div>
+      <div id="change-detail" class="detail-empty panel">Select an analysis to inspect its full explanation.</div>
+      <div class="impact-layout">
+        <div>
+          <div class="section-title compact"><h3>Change Impact Graph</h3><select id="impact-change" aria-label="Changed resource" disabled></select></div>
+          <p class="note">Edges mean “a change to A may affect B.” Scroll to zoom; drag to pan; select a node for its details.</p>
+          <div class="legend"><span class="legend-changed">Changed</span><span class="legend-direct">Direct</span><span class="legend-indirect">Indirect</span><span class="legend-tier1">Tier‑1</span><span class="legend-production">Production</span></div>
+          <div id="impact-graph" class="panel impact-graph"><p class="simple muted">No analysis selected.</p></div>
+        </div>
+        <aside id="impact-node-detail" class="panel node-detail"><p class="muted">Select a node in the graph to view its properties and dependency depth.</p></aside>
+      </div>
+    </section>
+
+    <section id="topology">
+      <div class="section-title"><div><p class="eyebrow">LIVE AWS TOPOLOGY</p><h2>Discovered dependencies</h2></div><button id="sync" class="secondary">Sync read-only AWS topology</button></div>
+      <p id="topology-freshness" class="note">No topology synchronization recorded.</p>
+      <div id="topology-graph" class="panel topology"><p class="simple muted">No supported live relationships were discovered.</p></div>
+    </section>
+
+    <section id="verification" class="split">
+      <div>
+        <p class="eyebrow">V3 PREDICTION VERIFICATION</p><h2>Record a deployed change outcome</h2>
+        <p class="note">Observed cost is compared as a reviewer-supplied delta. Cost Explorer can attach an account/service-period signal, but it cannot prove per-resource billing attribution.</p>
+        <form id="verification-form" class="panel form">
+          <label>Analysis to verify<select id="verification-analysis" required></select></label>
+          <label>Deployment identifier <span class="muted">(CI run, change ticket, or release ID)</span><input id="deployment-identifier" maxlength="160" placeholder="deploy-2026-09-04-001"></label>
+          <label>Observed monthly cost delta (USD)<input id="actual-cost" type="number" step="0.01" value="520" required></label>
+          <label>Observed affected resource/service IDs <span class="muted">(comma-separated)</span><input id="observed-resources" placeholder="service.checkout-api, alb.checkout"></label>
+          <div class="cloudwatch-control"><label>Optional EC2 ID for live CloudWatch CPU<input id="cpu-instance-id" placeholder="i-0123456789abcdef0"></label><button id="read-cpu" type="button" class="secondary">Read CPU</button><span id="cpu-result" class="muted">No CloudWatch metric attached.</span></div>
+          <div class="cloudwatch-control"><label>Optional Cost Explorer period<input id="cost-start-date" type="date" aria-label="Cost Explorer period start"><input id="cost-end-date" type="date" aria-label="Cost Explorer period end"><input id="cost-service" placeholder="AWS service name (optional)" aria-label="AWS Cost Explorer service"></label><button id="read-cost" type="button" class="secondary">Read cost</button><span id="cost-result" class="muted">No Cost Explorer signal attached.</span></div>
+          <div class="telemetry-grid">
+            <label>Latency before (ms)<input id="latency-before" type="number" min="0" step="0.1" value="120"></label><label>Latency after (ms)<input id="latency-after" type="number" min="0" step="0.1" value="150"></label>
+            <label>Error rate before (%)<input id="errors-before" type="number" min="0" max="100" step="0.01" value="0.2"></label><label>Error rate after (%)<input id="errors-after" type="number" min="0" max="100" step="0.01" value="0.4"></label>
+            <label>Availability before (%)<input id="availability-before" type="number" min="0" max="100" step="0.01" value="99.99"></label><label>Availability after (%)<input id="availability-after" type="number" min="0" max="100" step="0.01" value="99.99"></label>
+          </div>
+          <button>Record and verify outcome</button>
+        </form>
+      </div>
+      <div><p class="eyebrow">HISTORICAL ACCURACY</p><h2>Verification results</h2><div id="verifications" class="panel"></div></div>
+    </section>
+
+    <section class="split">
+      <div>
+        <p class="eyebrow">ANALYZE A PLAN</p><h2>Submit Terraform plan JSON</h2>
+        <form id="plan-form" class="panel form">
+          <label>Project<input id="project" value="payments-platform"></label><label>Pull request<input id="pr" value="142"></label>
+          <label>Environment<select id="environment"><option>development</option><option>staging</option><option selected>production</option></select></label>
+          <label>Team<input id="team" value="Payments"></label><label>Remaining monthly budget (USD)<input id="budget" type="number" value="100" min="0"></label>
+          <label class="check"><input id="maintenance" type="checkbox"> Maintenance window is active</label>
+          <label>terraform show -json output<textarea id="plan" spellcheck="false"></textarea></label><button>Analyze change</button>
+        </form>
+      </div>
+      <div><p class="eyebrow">AUDIT</p><h2>Audit trail</h2><div id="audit" class="panel"></div></div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

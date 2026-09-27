@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    {"id": "aws_db_instance.checkout", "name": "checkout database", "kind": "rds", "environment": "production", "owner": "Payments"},
+    {"id": "service.checkout-api", "name": "checkout-api", "kind": "service", "environment": "production", "owner": "Payments"},
+    {"id": "service.payment-api", "name": "payment-api", "kind": "service", "environment": "production", "owner": "Payments"},
+    {"id": "alb.checkout", "name": "checkout load balancer", "kind": "alb", "environment": "production", "owner": "Platform"},
+    {"id": "audience.users", "name": "end users", "kind": "audience", "environment": "production", "owner": "Business"}
+  ],
+  "edges": [
+    {"source": "aws_db_instance.checkout", "target": "service.checkout-api", "type": "depends_on"},
+    {"source": "aws_db_instance.checkout", "target": "service.payment-api", "type": "depends_on"},
+    {"source": "service.checkout-api", "target": "alb.checkout", "type": "serves_through"},
+    {"source": "alb.checkout", "target": "audience.users", "type": "serves"}
+  ]
+}

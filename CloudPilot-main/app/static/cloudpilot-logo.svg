@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 50" width="240" height="50" fill="none" role="img" aria-label="CloudPilot — Change Intelligence">
+  <g transform="translate(4, 5)">
+    <rect width="40" height="40" rx="10" fill="url(#pilot_grad)"/>
+    <path d="M12 28C10.5 28 9.5 26.5 10 25L18 9C18.6 7.8 20.4 7.8 21 9L29 25C29.5 26.5 28.5 28 27 28L20 25.5L13 28H12Z" fill="#FFFFFF" fill-opacity=".95"/>
+    <circle cx="20" cy="18" r="3" fill="#06B6D4"/>
+    <path d="M14 26L20 18L26 26" stroke="#0891B2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="56" y="28" font-family="-apple-system, BlinkMacSystemFont, Inter, sans-serif" font-size="20" font-weight="700" fill="#F8FAFC" letter-spacing="-.5">Cloud<tspan fill="#06B6D4">Pilot</tspan></text>
+  <text x="56" y="39" font-family="-apple-system, BlinkMacSystemFont, Inter, sans-serif" font-size="9" font-weight="500" fill="#94A3B8" letter-spacing="1">CHANGE INTELLIGENCE</text>
+  <defs><linearGradient id="pilot_grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#0E7490"/><stop offset="1" stop-color="#0284C7"/></linearGradient></defs>
+</svg>

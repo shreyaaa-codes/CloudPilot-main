@@ -1,0 +1,6 @@
+{
+  "format_version": "1.2",
+  "resource_changes": [
+    {"address": "aws_db_instance.checkout", "mode": "managed", "type": "aws_db_instance", "name": "checkout", "change": {"actions": ["update"], "before": {"instance_class": "db.t3.medium", "publicly_accessible": false, "tags": {"Environment": "production", "Owner": "Payments"}}, "after": {"instance_class": "db.r6g.2xlarge", "publicly_accessible": false, "tags": {"Environment": "production", "Owner": "Payments"}}}}
+  ]
+}
